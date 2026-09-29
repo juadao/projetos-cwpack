@@ -499,7 +499,7 @@ export function ProjectCadastroTab({
           </div>
           <div className="space-y-2 pt-2">
             <Label className="text-sm font-semibold">
-              Resuma as expectativas dos projetos e quais técnicas/embalagens querem implementar:
+              Resuma as expectativas dos projetos e quais técnicas/embalagens quer implementar:
             </Label>
             <Textarea
               value={projectExpectations}
