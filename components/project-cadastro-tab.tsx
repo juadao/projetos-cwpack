@@ -347,10 +347,10 @@ export function ProjectCadastroTab({
       {/* Responsáveis */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">👥 Responsáveis no Cliente</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">👥 Responsáveis</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Solicitante Responsável */}
+          {/* 1. Solicitante Responsável */}
           <div className="pb-4 border-b">
             <div className="flex items-center gap-2 mb-4">
               <UserPlus className="h-4 w-4 text-primary" />
@@ -372,37 +372,47 @@ export function ProjectCadastroTab({
               </div>
             </div>
           </div>
-          <div className="space-y-3">
-            {respRows.map((r, idx) => (
-              <div key={r.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                <div className="space-y-2">
-                  <Label className={idx === 0 ? '' : 'md:invisible'}>Nome</Label>
-                  <Input value={r.name} onChange={(e) => updateRespRow(r.id, 'name', e.target.value)} placeholder="Nome completo" />
+
+          {/* 2. Clientes (contatos no cliente) */}
+          <div className="pb-4 border-b">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm">Clientes</h3>
+            </div>
+            <div className="space-y-3">
+              {respRows.map((r, idx) => (
+                <div key={r.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                  <div className="space-y-2">
+                    <Label className={idx === 0 ? '' : 'md:invisible'}>Nome</Label>
+                    <Input value={r.name} onChange={(e) => updateRespRow(r.id, 'name', e.target.value)} placeholder="Nome completo" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className={idx === 0 ? '' : 'md:invisible'}>Cargo/Função</Label>
+                    <Select value={r.role} onValueChange={(v) => updateRespRow(r.id, 'role', v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {RESPONSIBLE_ROLES.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className={idx === 0 ? '' : 'md:invisible'}>WhatsApp/Telefone</Label>
+                    <Input value={r.phone} onChange={(e) => updateRespRow(r.id, 'phone', maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeRespRow(r.id)} disabled={respRows.length === 1} className="mb-0.5">
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label className={idx === 0 ? '' : 'md:invisible'}>Cargo/Função</Label>
-                  <Select value={r.role} onValueChange={(v) => updateRespRow(r.id, 'role', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      {RESPONSIBLE_ROLES.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className={idx === 0 ? '' : 'md:invisible'}>WhatsApp/Telefone</Label>
-                  <Input value={r.phone} onChange={(e) => updateRespRow(r.id, 'phone', maskPhone(e.target.value))} placeholder="(00) 00000-0000" />
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => removeRespRow(r.id)} disabled={respRows.length === 1} className="mb-0.5">
-                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
-            ))}
-            <Button variant="outline" size="sm" onClick={addRespRow}>
-              <Plus className="h-4 w-4 mr-2" />Adicionar Responsável
-            </Button>
+              ))}
+              <Button variant="outline" size="sm" onClick={addRespRow}>
+                <Plus className="h-4 w-4 mr-2" />Adicionar Responsável
+              </Button>
+            </div>
           </div>
-          <div className="pt-4 border-t">
-            <h3 className="font-semibold text-sm mb-4">Guardião no Cliente</h3>
+
+          {/* 3. Guardião no Cliente */}
+          <div>
+            <h3 className="font-semibold text-sm mb-4">Guardião no Cliente (Responsável por acompanhar as validações)</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Nome Completo do Guardião</Label>
@@ -499,7 +509,7 @@ export function ProjectCadastroTab({
           </div>
           <div className="space-y-2 pt-2">
             <Label className="text-sm font-semibold">
-              Resuma as expectativas dos projetos e quais técnicas/embalagens quer implementar:
+              Resuma as expectativas dos projetos e quais técnicas/embalagens querem implementar:
             </Label>
             <Textarea
               value={projectExpectations}
