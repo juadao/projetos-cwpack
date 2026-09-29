@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Plus, Trash2, Save, UserPlus } from 'lucide-react';
+import { Loader2, Plus, Trash2, Save, UserPlus, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Project, ProjectResponsible, YesNoUnknown } from '@/lib/types';
 import { INTEREST_OPTIONS, RESPONSIBLE_ROLES } from '@/lib/types';
