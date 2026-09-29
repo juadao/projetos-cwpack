@@ -465,17 +465,17 @@ export default function NewProjectPage() {
         </Card>
       )}
 
-      {/* Section B — Responsibles */}
+      {/* Section B — Responsáveis */}
       {activeSection === 'B' && (
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
-              Responsáveis no Cliente
+              Responsáveis
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Solicitante Responsável */}
+            {/* 1. Solicitante Responsável */}
             <div className="pt-4 border-b pb-4">
               <div className="flex items-center gap-2 mb-4">
                 <UserPlus className="h-5 w-5 text-primary" />
@@ -506,60 +506,70 @@ export default function NewProjectPage() {
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
-              {responsibles.map((r, idx) => (
-                <div key={r.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                  <div className="space-y-2">
-                    <Label htmlFor={`resp-name-${idx}`}>Nome</Label>
-                    <Input
-                      id={`resp-name-${idx}`}
-                      value={r.name}
-                      onChange={(e) => updateResponsible(r.id, 'name', e.target.value)}
-                      placeholder="Nome completo"
-                    />
+
+            {/* 2. Clientes */}
+            <div className="border-b pb-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold">Clientes</h3>
+              </div>
+              <div className="space-y-2">
+                {responsibles.map((r, idx) => (
+                  <div key={r.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor={`resp-name-${idx}`} className={idx === 0 ? '' : 'md:invisible'}>Nome</Label>
+                      <Input
+                        id={`resp-name-${idx}`}
+                        value={r.name}
+                        onChange={(e) => updateResponsible(r.id, 'name', e.target.value)}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`resp-role-${idx}`} className={idx === 0 ? '' : 'md:invisible'}>Cargo/Função</Label>
+                      <Select value={r.role} onValueChange={(v) => updateResponsible(r.id, 'role', v)}>
+                        <SelectTrigger id={`resp-role-${idx}`}>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RESPONSIBLE_ROLES.map((role) => (
+                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`resp-phone-${idx}`} className={idx === 0 ? '' : 'md:invisible'}>WhatsApp/Telefone</Label>
+                      <Input
+                        id={`resp-phone-${idx}`}
+                        value={r.phone}
+                        onChange={(e) => updateResponsible(r.id, 'phone', maskPhone(e.target.value))}
+                        placeholder="(00) 00000-0000"
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeResponsible(r.id)}
+                      disabled={responsibles.length === 1}
+                      className="mb-0.5"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`resp-role-${idx}`}>Cargo/Função</Label>
-                    <Select value={r.role} onValueChange={(v) => updateResponsible(r.id, 'role', v)}>
-                      <SelectTrigger id={`resp-role-${idx}`}>
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RESPONSIBLE_ROLES.map((role) => (
-                          <SelectItem key={role} value={role}>{role}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`resp-phone-${idx}`}>WhatsApp/Telefone</Label>
-                    <Input
-                      id={`resp-phone-${idx}`}
-                      value={r.phone}
-                      onChange={(e) => updateResponsible(r.id, 'phone', maskPhone(e.target.value))}
-                      placeholder="(00) 00000-0000"
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeResponsible(r.id)}
-                    disabled={responsibles.length === 1}
-                    className="mb-0.5"
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={addResponsible}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Responsável
-              </Button>
+                ))}
+                <Button variant="outline" size="sm" onClick={addResponsible}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Responsável
+                </Button>
+              </div>
             </div>
-            <div className="pt-4 border-t">
+
+            {/* 3. Guardião no Cliente */}
+            <div>
               <div className="flex items-center gap-2 mb-4">
                 <UserCog className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold">Guardião no Cliente</h3>
+                <h3 className="font-semibold">Guardião no Cliente (Responsável por acompanhar as validações)</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
