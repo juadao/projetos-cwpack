@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Plus, Trash2, Save } from 'lucide-react';
+import { Loader2, Plus, Trash2, Save, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Project, ProjectResponsible, YesNoUnknown } from '@/lib/types';
 import { INTEREST_OPTIONS, RESPONSIBLE_ROLES } from '@/lib/types';
@@ -40,6 +40,7 @@ const EXTENDED_INTERESTS = [
   'Massas',
   'Congelados',
 ];
+const REQUESTER_ROLES = ['Representante', 'Chefs', 'Gerente', 'Proprietário'];
 
 export function ProjectCadastroTab({
   project,
@@ -52,7 +53,6 @@ export function ProjectCadastroTab({
 }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-
   // Dados do Cliente
   const [isExistingClient, setIsExistingClient] = useState<string>(
     project.is_existing_client ? 'Sim' : 'Não'
@@ -67,17 +67,18 @@ export function ProjectCadastroTab({
   const [needsProduct, setNeedsProduct] = useState<string>('');
   const [isSameLocation, setIsSameLocation] = useState<boolean>(project.is_same_location ?? true);
   const [testLocationAddress, setTestLocationAddress] = useState(project.test_location_address || '');
-
   // Responsáveis
   const [guardianName, setGuardianName] = useState(project.guardian_name || '');
   const [guardianRole, setGuardianRole] = useState(project.guardian_role || '');
   const [guardianPhone, setGuardianPhone] = useState(project.guardian_phone || '');
+  // Solicitante Responsável
+  const [requesterName, setRequesterName] = useState(project.requester_name || '');
+  const [requesterRole, setRequesterRole] = useState(project.requester_role || '');
   const [respRows, setRespRows] = useState(
     responsibles.length > 0
       ? responsibles.map((r) => ({ id: r.id, name: r.name || '', role: r.role || '', phone: r.phone || '' }))
       : [{ id: crypto.randomUUID(), name: '', role: '', phone: '' }]
   );
-
   // Infraestrutura
   const [hasCounter, setHasCounter] = useState<YesNoUnknown>((project.has_counter as YesNoUnknown) || 'Não Sabe');
   const [hasColdRoom, setHasColdRoom] = useState<YesNoUnknown>((project.has_cold_room as YesNoUnknown) || 'Não Sabe');
@@ -91,7 +92,6 @@ export function ProjectCadastroTab({
   const [infrastructureNotes, setInfrastructureNotes] = useState(
     (project.approval_observations || '').replace(/^Obs Infraestrutura:\s*/, '')
   );
-
   // Termos Comerciais e Expectativas
   const [monthlyConsumption, setMonthlyConsumption] = useState(project.monthly_consumption || '');
   const [suggestedDate, setSuggestedDate] = useState(project.suggested_date || '');
@@ -102,7 +102,6 @@ export function ProjectCadastroTab({
       prev.includes(value) ? prev.filter((i) => i !== value) : [...prev, value]
     );
   };
-
   const addRespRow = () => {
     setRespRows([...respRows, { id: crypto.randomUUID(), name: '', role: '', phone: '' }]);
   };
@@ -139,6 +138,8 @@ export function ProjectCadastroTab({
       guardian_name: guardianName || null,
       guardian_role: guardianRole || null,
       guardian_phone: guardianPhone || null,
+      requester_name: requesterName || null,
+      requester_role: requesterRole || null,
       has_counter: hasCounter,
       has_cold_room: hasColdRoom,
       has_climate_area: hasClimateArea,
@@ -155,13 +156,11 @@ export function ProjectCadastroTab({
       is_existing_client: isExistingClient === 'Sim',
       updated_at: new Date().toISOString(),
     }).eq('id', project.id);
-
     if (error) {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
       setSaving(false);
       return;
     }
-
     const existingIds = responsibles.map((r) => r.id);
     const keptIds = respRows.filter((r) => existingIds.includes(r.id)).map((r) => r.id);
     const deletedIds = existingIds.filter((id) => !keptIds.includes(id));
@@ -185,7 +184,6 @@ export function ProjectCadastroTab({
         });
       }
     }
-
     toast({ title: 'Cadastro atualizado com sucesso!' });
     setSaving(false);
     onUpdate();
@@ -233,7 +231,6 @@ export function ProjectCadastroTab({
               </SelectContent>
             </Select>
           </div>
-
           {isExistingClient === 'Não' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -246,14 +243,12 @@ export function ProjectCadastroTab({
               </div>
             </div>
           )}
-
           {isExistingClient === 'Sim' && (
             <div className="space-y-2">
               <Label htmlFor="clientNameSim">Nome do Cliente *</Label>
               <Input id="clientNameSim" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Nome do cliente" />
             </div>
           )}
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="city">Endereço</Label>
@@ -278,7 +273,6 @@ export function ProjectCadastroTab({
               </Select>
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             <div className="space-y-2">
               <Label>Precisa cadastrar fornecedor?</Label>
@@ -301,7 +295,6 @@ export function ProjectCadastroTab({
               </Select>
             </div>
           </div>
-
           <div className="space-y-2 pt-2 border-t">
             <Label>Projetos de Interesse</Label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
@@ -324,7 +317,6 @@ export function ProjectCadastroTab({
               })}
             </div>
           </div>
-
           <div className="space-y-2 pt-2 border-t">
             <Label>O local do teste é o mesmo endereço do cliente?</Label>
             <div className="flex gap-6 pt-1">
@@ -358,6 +350,28 @@ export function ProjectCadastroTab({
           <CardTitle className="text-base flex items-center gap-2">👥 Responsáveis no Cliente</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Solicitante Responsável */}
+          <div className="pb-4 border-b">
+            <div className="flex items-center gap-2 mb-4">
+              <UserPlus className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm">Solicitante Responsável</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nome</Label>
+                <Input value={requesterName} onChange={(e) => setRequesterName(e.target.value)} placeholder="Nome do solicitante" />
+              </div>
+              <div className="space-y-2">
+                <Label>Cargo/Função</Label>
+                <Select value={requesterRole} onValueChange={setRequesterRole}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {REQUESTER_ROLES.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
           <div className="space-y-3">
             {respRows.map((r, idx) => (
               <div key={r.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
