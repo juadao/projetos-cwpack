@@ -55,25 +55,38 @@ export const PRODUCT_SUGGESTIONS = [
 ] as const;
 
 export type PipelineStatus =
-  | 'Solicitação Recebida'
-  | 'Em Análise'
-  | 'Em Preparação'
+  | 'Solicitado'
+  | 'Análise da Equipe Técnica'
+  | 'Preparação Operacional'
   | 'Agendado'
-  | 'Teste em Andamento'
-  | 'Em Negociação Comercial'
-  | 'Venda Fechada'
-  | 'Sem Retorno';
+  | 'Em Campo'
+  | 'Período de Validação'
+  | 'Teste Aprovado'
+  | 'Negociação Comercial'
+  | 'Faturado'
+  | 'Perdido';
 
-export const PIPELINE_STATUSES: PipelineStatus[] = [
-  'Solicitação Recebida',
-  'Em Análise',
-  'Em Preparação',
-  'Agendado',
-  'Teste em Andamento',
-  'Em Negociação Comercial',
-  'Venda Fechada',
-  'Sem Retorno',
+export interface PipelineStageMeta {
+  status: PipelineStatus;
+  label: string;
+  description: string;
+  color: string; // cor da identidade da etapa
+}
+
+export const PIPELINE_STAGES: PipelineStageMeta[] = [
+  { status: 'Solicitado', label: 'Solicitado', description: 'Representante faz a requisição no sistema.', color: '#38bdf8' },
+  { status: 'Análise da Equipe Técnica', label: 'Análise da Equipe Técnica', description: 'A equipe define viabilidade, planeja o projeto e passa datas disponíveis.', color: '#8b5cf6' },
+  { status: 'Preparação Operacional', label: 'Preparação Operacional', description: 'A equipe aceita a data, separa materiais, monta malas/equipamentos e reserva hotel/passagens.', color: '#f59e0b' },
+  { status: 'Agendado', label: 'Agendado', description: 'Tudo pronto e com data confirmada, aguardando o dia de ir ao cliente.', color: '#6366f1' },
+  { status: 'Em Campo', label: 'Em Campo', description: 'Dia de executar o teste, treinamento ou implementação.', color: '#ec4899' },
+  { status: 'Período de Validação', label: 'Período de Validação', description: 'Acompanhamento dos 10 dias pós-execução.', color: '#14b8a6' },
+  { status: 'Teste Aprovado', label: 'Teste Aprovado', description: 'Cliente valida o resultado.', color: '#22c55e' },
+  { status: 'Negociação Comercial', label: 'Negociação Comercial', description: 'Valores de embalagens, contratos e máquinas.', color: '#eab308' },
+  { status: 'Faturado', label: 'Faturado', description: 'Pedido/contrato fechado.', color: '#059669' },
+  { status: 'Perdido', label: 'Perdido', description: 'Oportunidade não convertida.', color: '#ef4444' },
 ];
+
+export const PIPELINE_STATUSES: PipelineStatus[] = PIPELINE_STAGES.map((s) => s.status);
 
 export interface Project {
   id: string;
