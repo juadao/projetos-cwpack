@@ -70,12 +70,12 @@ export interface PipelineStageMeta {
   status: PipelineStatus;
   label: string;
   description: string;
-  color: string; // cor da identidade da etapa
+  color: string;
 }
 
 export const PIPELINE_STAGES: PipelineStageMeta[] = [
   { status: 'Solicitado', label: 'Solicitado', description: 'Representante faz a requisição no sistema.', color: '#38bdf8' },
-  { status: 'Análise da Equipe Técnica', label: 'Análise da Equipe Técnica', description: 'A equipe define viabilidade, planeja o projeto e passa datas disponíveis.', color: '#8b5cf6' },
+  { status: 'Análise da Equipe Técnica', label: 'Análise da Equipe Técnica', description: 'A equipe define viabilidade, planeja o projeto e passa as datas disponíveis.', color: '#8b5cf6' },
   { status: 'Preparação Operacional', label: 'Preparação Operacional', description: 'A equipe aceita a data, separa materiais, monta malas/equipamentos e reserva hotel/passagens.', color: '#f59e0b' },
   { status: 'Agendado', label: 'Agendado', description: 'Tudo pronto e com data confirmada, aguardando o dia de ir ao cliente.', color: '#6366f1' },
   { status: 'Em Campo', label: 'Em Campo', description: 'Dia de executar o teste, treinamento ou implementação.', color: '#ec4899' },
