@@ -33,7 +33,6 @@ export const RESPONSIBLE_ROLES = [
 ] as const;
 
 export const CHEFS = ['Chef Manu', 'Chef Jonathan', 'Julia', 'Ewerton', 'Luana', 'Juliana'] as const;
-
 export const LOGISTICS_RESPONSIBLES = ['Julia', 'Ewerton', 'Chefs', 'Representante', 'Luana', 'Juliana'] as const;
 
 export const LOGISTICS_ACTIONS = [
@@ -54,17 +53,13 @@ export const PRODUCT_SUGGESTIONS = [
   'Uva Verde/Vitoria', 'Açaí', 'Cheiro Verde', 'Kiwi', 'Mirtilo', 'Sucos diversos',
 ] as const;
 
+// ===== Fluxo Operacional das Etapas (5 etapas) =====
 export type PipelineStatus =
-  | 'Solicitado'
-  | 'Análise da Equipe Técnica'
-  | 'Preparação Operacional'
-  | 'Agendado'
-  | 'Em Campo'
-  | 'Período de Validação'
-  | 'Teste Aprovado'
-  | 'Negociação Comercial'
-  | 'Faturado'
-  | 'Perdido';
+  | 'Solicitados'
+  | 'Análise e Operacional'
+  | 'Comercial'
+  | 'Fidelizados'
+  | 'Perdidos';
 
 export interface PipelineStageMeta {
   status: PipelineStatus;
@@ -74,19 +69,26 @@ export interface PipelineStageMeta {
 }
 
 export const PIPELINE_STAGES: PipelineStageMeta[] = [
-  { status: 'Solicitado', label: 'Solicitado', description: 'Representante faz a requisição no sistema.', color: '#38bdf8' },
-  { status: 'Análise da Equipe Técnica', label: 'Análise da Equipe Técnica', description: 'A equipe define viabilidade, planeja o projeto e passa as datas disponíveis.', color: '#8b5cf6' },
-  { status: 'Preparação Operacional', label: 'Preparação Operacional', description: 'A equipe aceita a data, separa materiais, monta malas/equipamentos e reserva hotel/passagens.', color: '#f59e0b' },
-  { status: 'Agendado', label: 'Agendado', description: 'Tudo pronto e com data confirmada, aguardando o dia de ir ao cliente.', color: '#6366f1' },
-  { status: 'Em Campo', label: 'Em Campo', description: 'Dia de executar o teste, treinamento ou implementação.', color: '#ec4899' },
-  { status: 'Período de Validação', label: 'Período de Validação', description: 'Acompanhamento dos 10 dias pós-execução.', color: '#14b8a6' },
-  { status: 'Teste Aprovado', label: 'Teste Aprovado', description: 'Cliente valida o resultado.', color: '#22c55e' },
-  { status: 'Negociação Comercial', label: 'Negociação Comercial', description: 'Valores de embalagens, contratos e máquinas.', color: '#eab308' },
-  { status: 'Faturado', label: 'Faturado', description: 'Pedido/contrato fechado.', color: '#059669' },
-  { status: 'Perdido', label: 'Perdido', description: 'Oportunidade não convertida.', color: '#ef4444' },
+  { status: 'Solicitados', label: 'Solicitados', description: 'Representante faz a requisição no sistema.', color: '#38bdf8' },
+  { status: 'Análise e Operacional', label: 'Análise e Operacional', description: 'Viabilidade, planejamento, preparação, agendamento e execução em campo.', color: '#8b5cf6' },
+  { status: 'Comercial', label: 'Comercial', description: 'Negociação, comodato e faturamentos após o teste.', color: '#f59e0b' },
+  { status: 'Fidelizados', label: 'Fidelizados', description: 'Clientes ativos com operação contínua.', color: '#22c55e' },
+  { status: 'Perdidos', label: 'Perdidos', description: 'Oportunidades não convertidas.', color: '#ef4444' },
 ];
 
 export const PIPELINE_STATUSES: PipelineStatus[] = PIPELINE_STAGES.map((s) => s.status);
+
+// Tipos de projeto (select "Projeto") — presentes em todas as etapas
+export const PROJECT_TYPES = ['ATC', 'ATM', 'Reteste', 'Treinamento', 'Implementação'] as const;
+
+// Opções do select "Status" por etapa
+export const STATUS_BY_STAGE: Record<PipelineStatus, string[]> = {
+  Solicitados: [],
+  'Análise e Operacional': ['Reunião', 'Preparação Op.', 'Agendado', 'Adiado', 'Em Campo', 'Teste Aprovado', 'Teste Reprovado'],
+  Comercial: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
+  Fidelizados: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
+  Perdidos: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
+};
 
 export interface Project {
   id: string;
@@ -102,6 +104,10 @@ export interface Project {
   guardian_name: string | null;
   guardian_role: string | null;
   guardian_phone: string | null;
+  requester_name: string | null;
+  requester_role: string | null;
+  project_type: string | null;
+  flow_status: string | null;
   has_sealer: string | null;
   has_cold_room: string | null;
   has_refrigeration: string | null;
