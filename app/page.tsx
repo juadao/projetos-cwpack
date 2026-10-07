@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { Search, GripVertical, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Project, PipelineStatus } from '@/lib/types';
-import { PIPELINE_STAGES, PIPELINE_STATUSES } from '@/lib/types';
+import { PIPELINE_STAGES, PROJECT_TYPES, STATUS_BY_STAGE } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
-const DEFAULT_STAGE: PipelineStatus = 'Solicitado';
+const DEFAULT_STAGE: PipelineStatus = 'Solicitados';
 
 export default function DashboardPage() {
   const { toast } = useToast();
@@ -34,26 +34,35 @@ export default function DashboardPage() {
     loadData();
   }, [loadData]);
 
-  // Alteração manual do fluxo (arrastar OU select) — grava direto no projeto
-  const moveTo = async (id: string, status: PipelineStatus, current: string | null) => {
-    if (status === current) return;
-    // Atualização otimista na tela
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, pipeline_status: status } : p))
-    );
-    setDraggedId(null);
+  // Atualização otimista + gravação no banco (fonte única de verdade)
+  const patchProject = async (id: string, patch: Partial<Project>) => {
+    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
     const { error } = await supabase
       .from('projects')
-      .update({ pipeline_status: status, updated_at: new Date().toISOString() })
+      .update({ ...patch, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) {
-      toast({ title: 'Erro ao mover', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
       loadData();
-    } else {
-      const proj = projects.find((p) => p.id === id);
-      toast({ title: 'Projeto movido', description: `${proj?.client_name || 'Projeto'} → ${status}` });
     }
   };
+
+  // Mudança de ETAPA (arrastar entre colunas).
+  // O Status só é mantido se for válido na etapa nova; em Solicitados é limpo.
+  const moveTo = (id: string, newStage: PipelineStatus) => {
+    const proj = projects.find((p) => p.id === id);
+    if (!proj) { setDraggedId(null); return; }
+    if (proj.pipeline_status === newStage) { setDraggedId(null); return; }
+    const validStatuses = STATUS_BY_STAGE[newStage];
+    const nextFlowStatus =
+      proj.flow_status && validStatuses.includes(proj.flow_status) ? proj.flow_status : null;
+    setDraggedId(null);
+    patchProject(id, { pipeline_status: newStage, flow_status: nextFlowStatus });
+    toast({ title: 'Projeto movido', description: `${proj.client_name || 'Projeto'} → ${newStage}` });
+  };
+
+  const changeType = (id: string, value: string) => patchProject(id, { project_type: value });
+  const changeFlowStatus = (id: string, value: string) => patchProject(id, { flow_status: value });
 
   const visible = projects.filter((p) => {
     const q = search.trim().toLowerCase();
@@ -65,16 +74,12 @@ export default function DashboardPage() {
     );
   });
 
-  // Projeto sem status definido entra em "Solicitado"
+  // Projeto sem etapa definida entra em "Solicitados"
   const stageOf = (p: Project): PipelineStatus =>
     ((p.pipeline_status as PipelineStatus) || DEFAULT_STAGE);
 
   const count = (status: PipelineStatus) =>
     visible.filter((p) => stageOf(p) === status).length;
-
-  const potencial = visible
-    .filter((p) => stageOf(p) === 'Negociação Comercial')
-    .reduce((sum, p) => sum + (Number(p.monthly_volume_closed) || 0), 0);
 
   if (loading) {
     return (
@@ -91,7 +96,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Fluxo Operacional das Etapas</h1>
           <p className="text-sm text-muted-foreground">
-            Arraste os projetos entre as etapas ou troque o status direto no card
+            Arraste os projetos entre as etapas • Use os selects de Projeto e Status
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -120,36 +125,31 @@ export default function DashboardPage() {
           <p className="text-2xl font-bold">{visible.length}</p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Em Campo</p>
-          <p className="text-2xl font-bold" style={{ color: '#ec4899' }}>{count('Em Campo')}</p>
+          <p className="text-xs text-muted-foreground">Análise e Op.</p>
+          <p className="text-2xl font-bold" style={{ color: '#8b5cf6' }}>{count('Análise e Operacional')}</p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Faturados</p>
-          <p className="text-2xl font-bold" style={{ color: '#059669' }}>{count('Faturado')}</p>
+          <p className="text-xs text-muted-foreground">Comercial</p>
+          <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{count('Comercial')}</p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Potencial em Negociação</p>
-          <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>
-            {potencial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
-          </p>
+          <p className="text-xs text-muted-foreground">Fidelizados</p>
+          <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>{count('Fidelizados')}</p>
         </div>
       </div>
 
-      {/* Fluxo — 10 etapas (5 + 5), cor própria por etapa */}
+      {/* Fluxo — 5 etapas com cor própria */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {PIPELINE_STAGES.map((stage, idx) => {
+        {PIPELINE_STAGES.map((stage) => {
           const stageProjects = visible.filter((p) => stageOf(p) === stage.status);
           return (
             <div
               key={stage.status}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => {
-                if (draggedId) {
-                  const proj = projects.find((p) => p.id === draggedId);
-                  if (proj) moveTo(proj.id, stage.status, proj.pipeline_status);
-                }
+                if (draggedId) moveTo(draggedId, stage.status);
               }}
-              className="rounded-xl border bg-card flex flex-col min-h-[240px] overflow-hidden"
+              className="rounded-xl border bg-card flex flex-col min-h-[260px] overflow-hidden"
               style={{ borderTop: `6px solid ${stage.color}` }}
             >
               {/* Cabeçalho colorido da etapa */}
@@ -164,7 +164,7 @@ export default function DashboardPage() {
                       className="font-semibold text-xs leading-tight truncate"
                       style={{ color: stage.color }}
                     >
-                      {idx + 1}. {stage.label}
+                      {stage.label}
                     </h3>
                   </div>
                   <span
@@ -192,35 +192,53 @@ export default function DashboardPage() {
                     draggable
                     onDragStart={() => setDraggedId(p.id)}
                     onDragEnd={() => setDraggedId(null)}
-                    className="rounded-lg border bg-background p-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
+                    className="rounded-lg border bg-background p-2.5 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
                   >
-                    <div className="flex items-start gap-1">
-                      <GripVertical className="h-3 w-3 mt-1 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{p.client_name}</p>
-                        <p className="text-[10px] text-muted-foreground">{p.code}</p>
-                      </div>
-                    </div>
-                    {/* Troca manual sem arrastar (ideal para celular) */}
-                    <Select
-                      value={stageOf(p)}
-                      onValueChange={(v) => moveTo(p.id, v as PipelineStatus, p.pipeline_status)}
-                    >
-                      <SelectTrigger className="h-7 mt-2 text-[11px]">
-                        <SelectValue placeholder="Trocar etapa..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PIPELINE_STATUSES.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Link
-                      href={`/projetos/${p.id}`}
-                      className="text-[10px] text-primary hover:underline block mt-1"
-                    >
-                      Abrir projeto →
+                    {/* Nome clicável — abre o projeto completo */}
+                    <Link href={`/projetos/${p.id}`} className="block">
+                      <p className="text-xs font-semibold truncate hover:underline">
+                        {p.client_name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{p.code}</p>
                     </Link>
+
+                    {/* Selects: Projeto (sempre) + Status (conforme a etapa) */}
+                    <div className={`grid gap-1.5 mt-2 ${stage.status === 'Solicitados' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-[9px] font-medium text-muted-foreground">Projeto:</p>
+                        <Select
+                          value={p.project_type || undefined}
+                          onValueChange={(v) => changeType(p.id, v)}
+                        >
+                          <SelectTrigger className="h-7 text-[10px] px-2">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PROJECT_TYPES.map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {stage.status !== 'Solicitados' && (
+                        <div className="space-y-0.5 min-w-0">
+                          <p className="text-[9px] font-medium text-muted-foreground">Status:</p>
+                          <Select
+                            value={p.flow_status || undefined}
+                            onValueChange={(v) => changeFlowStatus(p.id, v)}
+                          >
+                            <SelectTrigger className="h-7 text-[10px] px-2">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUS_BY_STAGE[stage.status].map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
