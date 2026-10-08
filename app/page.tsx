@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, GripVertical, Plus } from 'lucide-react';
+import { Search, GripVertical, Plus, Filter, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Project, PipelineStatus } from '@/lib/types';
 import { PIPELINE_STAGES, PROJECT_TYPES, STATUS_BY_STAGE } from '@/lib/types';
@@ -13,11 +13,18 @@ import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_STAGE: PipelineStatus = 'Solicitados';
 
+// Todos os status únicos possíveis (das 3 listas de etapa)
+const ALL_FLOW_STATUSES = Array.from(
+  new Set(Object.values(STATUS_BY_STAGE).flat())
+);
+
 export default function DashboardPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -65,14 +72,23 @@ export default function DashboardPage() {
   const changeFlowStatus = (id: string, value: string) => patchProject(id, { flow_status: value });
 
   const visible = projects.filter((p) => {
+    // Busca por texto
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      (p.client_name || '').toLowerCase().includes(q) ||
-      (p.code || '').toLowerCase().includes(q) ||
-      (p.cnpj || '').includes(search.trim())
-    );
+    if (q) {
+      const matchesSearch =
+        (p.client_name || '').toLowerCase().includes(q) ||
+        (p.code || '').toLowerCase().includes(q) ||
+        (p.cnpj || '').includes(search.trim());
+      if (!matchesSearch) return false;
+    }
+    // Filtro por Status
+    if (statusFilter !== 'all' && (p.flow_status || '') !== statusFilter) return false;
+    // Filtro por tipo de Projeto
+    if (typeFilter !== 'all' && (p.project_type || '') !== typeFilter) return false;
+    return true;
   });
+
+  const hasFilters = statusFilter !== 'all' || typeFilter !== 'all';
 
   // Projeto sem etapa definida entra em "Solicitados"
   const stageOf = (p: Project): PipelineStatus =>
@@ -116,6 +132,55 @@ export default function DashboardPage() {
             </Button>
           </Link>
         </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 bg-card border rounded-lg p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground shrink-0 pb-0.5">
+          <Filter className="h-4 w-4" />
+          Filtros:
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+          <div className="space-y-1">
+            <p className="text-[10px] font-medium text-muted-foreground">Status</p>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                {ALL_FLOW_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-medium text-muted-foreground">Projeto</p>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os projetos</SelectItem>
+                {PROJECT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setStatusFilter('all'); setTypeFilter('all'); }}
+            className="shrink-0"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Limpar
+          </Button>
+        )}
       </div>
 
       {/* KPIs rápidos */}
@@ -183,7 +248,7 @@ export default function DashboardPage() {
               <div className="p-2 space-y-2 flex-1">
                 {stageProjects.length === 0 && (
                   <p className="text-[11px] text-muted-foreground text-center pt-6">
-                    Nenhum projeto aqui
+                    {hasFilters ? 'Nada com esse filtro aqui' : 'Nenhum projeto aqui'}
                   </p>
                 )}
                 {stageProjects.map((p) => (
