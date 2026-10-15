@@ -13,6 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_STAGE: PipelineStatus = 'Solicitados';
 
+// Status do fluxo Comercial que contam como Cliente Ativo
+const ACTIVE_CLIENT_STATUSES = ['Faturamento 1', 'Faturamento 2', 'Faturamento 3'];
+
 // Todos os status únicos possíveis (das 3 listas de etapa)
 const ALL_FLOW_STATUSES = Array.from(
   new Set(Object.values(STATUS_BY_STAGE).flat())
@@ -96,6 +99,13 @@ export default function DashboardPage() {
 
   const count = (status: PipelineStatus) =>
     visible.filter((p) => stageOf(p) === status).length;
+
+  // Clientes Ativos: projetos no fluxo Comercial com status de Faturamento 1, 2 ou 3
+  const activeClients = visible.filter(
+    (p) =>
+      stageOf(p) === 'Comercial' &&
+      ACTIVE_CLIENT_STATUSES.includes(p.flow_status || '')
+  ).length;
 
   if (loading) {
     return (
@@ -186,20 +196,28 @@ export default function DashboardPage() {
       {/* KPIs rápidos */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Projetos</p>
+          <p className="text-xs text-muted-foreground">Todos Projetos</p>
           <p className="text-2xl font-bold">{visible.length}</p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Análise e Op.</p>
-          <p className="text-2xl font-bold" style={{ color: '#8b5cf6' }}>{count('Análise e Operacional')}</p>
+          <p className="text-xs text-muted-foreground">Projetos Ativos</p>
+          <p className="text-2xl font-bold" style={{ color: '#3b82f6' }}>
+            {count('Análise e Operacional') + count('Comercial')}
+          </p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Comercial</p>
-          <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{count('Comercial')}</p>
+          <p className="text-xs text-muted-foreground">Clientes Ativos</p>
+          <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>
+            {activeClients}
+          </p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-xs text-muted-foreground">Fidelizados</p>
-          <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>{count('Fidelizados')}</p>
+          <p className="text-xs text-muted-foreground">Conversão</p>
+          <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>
+            {visible.length > 0
+              ? `${((count('Fidelizados') / visible.length) * 100).toFixed(1).replace('.', ',')}%`
+              : '0%'}
+          </p>
         </div>
       </div>
 
@@ -267,43 +285,63 @@ export default function DashboardPage() {
                       <p className="text-[10px] text-muted-foreground">{p.code}</p>
                     </Link>
 
-                    {/* Selects: Projeto (sempre) + Status (conforme a etapa) */}
-                    <div className={`grid gap-1.5 mt-2 ${stage.status === 'Solicitados' ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="text-[9px] font-medium text-muted-foreground">Projeto:</p>
-                        <Select
-                          value={p.project_type || undefined}
-                          onValueChange={(v) => changeType(p.id, v)}
-                        >
-                          <SelectTrigger className="h-7 text-[10px] px-2">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PROJECT_TYPES.map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    {/* Campos por etapa:
+                        Solicitados e Fidelizados → só Projeto
+                        Análise e Operacional / Comercial → Projeto + Status
+                        Perdidos → campo aberto de texto */}
+                    {stage.status === 'Perdidos' ? (
+                      <div className="space-y-0.5 mt-2">
+                        <p className="text-[9px] font-medium text-muted-foreground">Observação:</p>
+                        <Input
+                          defaultValue={p.flow_status || ''}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v !== (p.flow_status || '')) {
+                              patchProject(p.id, { flow_status: v || null });
+                            }
+                          }}
+                          placeholder="Escreva uma observação..."
+                          className="h-7 text-[10px] px-2"
+                        />
                       </div>
-                      {stage.status !== 'Solicitados' && (
+                    ) : (
+                      <div className={`grid gap-1.5 mt-2 ${stage.status === 'Solicitados' || stage.status === 'Fidelizados' ? 'grid-cols-1' : 'grid-cols-2'}`}>
                         <div className="space-y-0.5 min-w-0">
-                          <p className="text-[9px] font-medium text-muted-foreground">Status:</p>
+                          <p className="text-[9px] font-medium text-muted-foreground">Projeto:</p>
                           <Select
-                            value={p.flow_status || undefined}
-                            onValueChange={(v) => changeFlowStatus(p.id, v)}
+                            value={p.project_type || undefined}
+                            onValueChange={(v) => changeType(p.id, v)}
                           >
                             <SelectTrigger className="h-7 text-[10px] px-2">
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                             <SelectContent>
-                              {STATUS_BY_STAGE[stage.status].map((s) => (
-                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              {PROJECT_TYPES.map((t) => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
-                      )}
-                    </div>
+                        {stage.status !== 'Solicitados' && stage.status !== 'Fidelizados' && (
+                          <div className="space-y-0.5 min-w-0">
+                            <p className="text-[9px] font-medium text-muted-foreground">Status:</p>
+                            <Select
+                              value={p.flow_status || undefined}
+                              onValueChange={(v) => changeFlowStatus(p.id, v)}
+                            >
+                              <SelectTrigger className="h-7 text-[10px] px-2">
+                                <SelectValue placeholder="—" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STATUS_BY_STAGE[stage.status].map((s) => (
+                                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
