@@ -85,7 +85,7 @@ export const PROJECT_TYPES = ['ATC', 'ATM', 'Reteste', 'Treinamento', 'Implement
 export const STATUS_BY_STAGE: Record<PipelineStatus, string[]> = {
   Solicitados: [],
   'Análise e Operacional': ['Reunião', 'Preparação Op.', 'Agendado', 'Adiado', 'Em Campo', 'Teste Aprovado', 'Teste Reprovado'],
-  Comercial: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
+  Comercial: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by', 'Inativo'],
   Fidelizados: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
   Perdidos: ['Negociação', 'Comodato', 'Faturamento 1', 'Faturamento 2', 'Faturamento 3', 'Recusado', 'Stand-by'],
 };
