@@ -192,7 +192,7 @@ export default function NewProjectPage() {
           justification: projectExpectations || null,
           is_existing_client: isExistingClient === 'Sim',
           status: 'Em Andamento',
-          pipeline_status: 'Solicitação Recebida',
+          pipeline_status: 'Solicitados',
         })
         .select()
         .single();
