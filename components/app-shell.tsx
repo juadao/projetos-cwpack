@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth-context';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/agenda', label: 'Agenda', icon: Calendar },
   { href: '/projetos/novo', label: 'Novo Projeto', icon: FolderPlus },
   { href: '/projetos', label: 'Projetos', icon: Package },
   { href: '/checklists', label: 'Checklists Logísticos', icon: Truck },
