@@ -21,8 +21,9 @@ interface AgendaEvent {
   id: string;
   type: EventType;
   label: string;
+  statusLabel?: string | null;
   description?: string | null;
-  project?: Project; // Projeto vinculado (quando houver)
+  project?: Project;
 }
 
 interface ManualEventRow {
@@ -31,14 +32,29 @@ interface ManualEventRow {
   title: string;
   description: string | null;
   project_id: string | null;
+  status: string | null;
+  participants: string | null;
+  solicitante: string | null;
 }
 
-// Cores das barras e rótulos do painel
-const TYPE_STYLE: Record<EventType, { bg: string; badge: string }> = {
-  Campo: { bg: '#2563eb', badge: 'DIA DE CAMPO' },
-  ATC: { bg: '#22c55e', badge: 'ATC' },
-  ATM: { bg: '#f59e0b', badge: 'ATM' },
-  Agendamento: { bg: '#8b5cf6', badge: 'AGENDAMENTO' },
+// Cores das barras
+const TYPE_STYLE: Record<EventType, { bg: string }> = {
+  Campo: { bg: '#2563eb' },
+  ATC: { bg: '#22c55e' },
+  ATM: { bg: '#f59e0b' },
+  Agendamento: { bg: '#8b5cf6' },
+};
+
+// Rótulo do agendamento: "P ou A - Iniciais | Solicitante (Título)"
+const buildLabel = (r: ManualEventRow) => {
+  const statusLetter =
+    r.status === 'Programado' ? 'P' :
+    r.status === 'Agendado' ? 'A' : null;
+  const initials = (r.participants || '').toUpperCase();
+  const prefix = [statusLetter, initials].filter(Boolean).join(' - ');
+  const who = (r.solicitante || '').trim();
+  const main = who ? `${who} (${r.title})` : r.title;
+  return prefix ? `${prefix} | ${main}` : main;
 };
 
 const WEEK_DAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -71,12 +87,18 @@ export default function AgendaPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => fmt(new Date()));
 
-  // Formulário de novo agendamento
+  // Formulário de novo agendamento (modelo do rascunho)
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formDate, setFormDate] = useState('');
+  const [formStatus, setFormStatus] = useState<'Programado' | 'Agendado'>('Programado');
   const [formProjectId, setFormProjectId] = useState('none');
   const [formTitle, setFormTitle] = useState('');
+  const [withManu, setWithManu] = useState(false);
+  const [withJonathan, setWithJonathan] = useState(false);
+  const [withOther, setWithOther] = useState(false);
+  const [otherName, setOtherName] = useState('');
+  const [formSolicitante, setFormSolicitante] = useState('');
   const [formDesc, setFormDesc] = useState('');
 
   const loadData = useCallback(async () => {
@@ -107,7 +129,6 @@ export default function AgendaPage() {
       const base = String(p.start_date).slice(0, 10);
       if (base.length < 10) return;
 
-      // Dia de campo
       push(base, {
         id: `${p.id}-campo`,
         type: 'Campo',
@@ -115,7 +136,6 @@ export default function AgendaPage() {
         project: p,
       });
 
-      // Acompanhamentos automáticos por tipo de projeto
       const offsets =
         p.project_type === 'ATC' ? ATC_OFFSETS :
         p.project_type === 'ATM' ? ATM_OFFSETS : [];
@@ -130,14 +150,15 @@ export default function AgendaPage() {
       });
     });
 
-    // Agendamentos manuais criados ao clicar no dia
+    // Agendamentos manuais — rótulo "P/A - Iniciais | Solicitante (Título)"
     manualRows.forEach((r) => {
       const date = String(r.event_date).slice(0, 10);
       if (date.length < 10) return;
       push(date, {
         id: r.id,
         type: 'Agendamento',
-        label: r.title,
+        label: buildLabel(r),
+        statusLabel: r.status || null,
         description: r.description,
         project: r.project_id ? projects.find((p) => p.id === r.project_id) : undefined,
       });
@@ -194,8 +215,14 @@ export default function AgendaPage() {
   // ===== Agendamento manual =====
   const openDialog = (date: string) => {
     setFormDate(date);
+    setFormStatus('Programado');
     setFormProjectId('none');
     setFormTitle('');
+    setWithManu(false);
+    setWithJonathan(false);
+    setWithOther(false);
+    setOtherName('');
+    setFormSolicitante('');
     setFormDesc('');
     setDialogOpen(true);
   };
@@ -215,12 +242,22 @@ export default function AgendaPage() {
       toast({ title: 'Preencha a data e o título do evento', variant: 'destructive' });
       return;
     }
+
+    // Monta as iniciais dos participantes: M (Manu), J (Jonathan), 1ª letra do "Outro"
+    let letters = '';
+    if (withManu) letters += 'M';
+    if (withJonathan) letters += 'J';
+    if (withOther && otherName.trim()) letters += otherName.trim().charAt(0).toUpperCase();
+
     setSaving(true);
     const { error } = await supabase.from('agenda_events').insert({
       event_date: formDate,
       title,
       description: formDesc.trim() || null,
       project_id: formProjectId === 'none' ? null : formProjectId,
+      status: formStatus,
+      participants: letters || null,
+      solicitante: formSolicitante.trim() || null,
     });
     setSaving(false);
     if (error) {
@@ -230,7 +267,6 @@ export default function AgendaPage() {
     toast({ title: 'Agendamento salvo!' });
     setDialogOpen(false);
     setSelected(formDate);
-    // Se a data for de outro mês, move o calendário até ela
     const [yy, mm] = formDate.slice(0, 10).split('-').map(Number);
     if (yy && mm) setCursor(new Date(yy, mm - 1, 1));
     loadData();
@@ -263,7 +299,7 @@ export default function AgendaPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
           <p className="text-sm text-muted-foreground">
-            Clique em um dia para agendar • ATC D+3/7/10 • ATM D+5/10/14
+            Clique em um dia para agendar • P = Programado • A = Agendado • ATC D+3/7/10 • ATM D+5/10/14
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -283,30 +319,30 @@ export default function AgendaPage() {
       </div>
 
       {/* Legenda */}
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#2563eb' }} />
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#2563eb' }} />
           Dia de campo
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#22c55e' }} />
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#22c55e' }} />
           ATC D+3 / D+7 / D+10
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />
           ATM D+5 / D+10 / D+14
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
-          Agendamentos
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
+          Agendamentos (P/A)
         </span>
       </div>
 
-      {/* Calendário mensal */}
+      {/* Calendário mensal — fonte maior (como no print de referência) */}
       <div className="bg-card border rounded-xl overflow-hidden">
         <div className="grid grid-cols-7 border-b bg-muted/40">
           {WEEK_DAYS.map((d) => (
-            <div key={d} className="p-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div key={d} className="p-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {d}
             </div>
           ))}
@@ -326,7 +362,7 @@ export default function AgendaPage() {
                   setSelected(date);
                   openDialog(date);
                 }}
-                className={`relative text-left p-1 sm:p-1.5 min-h-[68px] sm:min-h-[96px] border-b border-r [&:nth-child(7n)]:border-r-0 transition-colors ${
+                className={`relative text-left p-1.5 sm:p-2 min-h-[80px] sm:min-h-[110px] border-b border-r [&:nth-child(7n)]:border-r-0 transition-colors ${
                   !inMonth
                     ? 'bg-muted/20 text-muted-foreground/50'
                     : 'hover:bg-muted/30'
@@ -334,26 +370,26 @@ export default function AgendaPage() {
               >
                 {/* Dia atual em destaque laranja */}
                 <span
-                  className={`inline-flex items-center justify-center h-5 w-5 rounded-full text-[10px] font-semibold ${
+                  className={`inline-flex items-center justify-center h-6 w-6 rounded-full text-xs font-semibold ${
                     isToday ? 'bg-orange-500 text-white' : ''
                   }`}
                 >
                   {dayNum}
                 </span>
 
-                {/* Barras de eventos */}
-                <div className="mt-1 space-y-0.5">
+                {/* Barras de eventos — fonte maior */}
+                <div className="mt-1.5 space-y-1">
                   {evs.slice(0, 3).map((ev) => (
                     <div
                       key={ev.id}
-                      className="rounded px-1 py-0.5 text-[8px] sm:text-[9px] leading-tight text-white truncate"
+                      className="rounded px-1.5 py-1 text-[10px] sm:text-[11px] leading-tight font-medium text-white truncate"
                       style={{ backgroundColor: TYPE_STYLE[ev.type].bg }}
                     >
                       {ev.label}
                     </div>
                   ))}
                   {evs.length > 3 && (
-                    <p className="text-[9px] text-muted-foreground pl-0.5">
+                    <p className="text-[10px] text-muted-foreground pl-0.5">
                       +{evs.length - 3}
                     </p>
                   )}
@@ -367,14 +403,14 @@ export default function AgendaPage() {
       {/* Painel do dia selecionado */}
       <div className="bg-card border rounded-xl p-4">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="text-sm font-semibold">Dia {brDate(selected)}</h2>
+          <h2 className="text-base font-semibold">Dia {brDate(selected)}</h2>
           <Button size="sm" onClick={() => openDialog(selected)}>
             <Plus className="h-4 w-4 mr-1" />
             Agendar neste dia
           </Button>
         </div>
         {selectedEvents.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhum compromisso neste dia.</p>
+          <p className="text-sm text-muted-foreground">Nenhum compromisso neste dia.</p>
         ) : (
           <div className="space-y-2">
             {selectedEvents.map((ev) => (
@@ -384,27 +420,31 @@ export default function AgendaPage() {
               >
                 <div className="min-w-0">
                   <span
-                    className="inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold text-white mb-1"
+                    className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold text-white mb-1"
                     style={{ backgroundColor: TYPE_STYLE[ev.type].bg }}
                   >
-                    {TYPE_STYLE[ev.type].badge}
+                    {ev.type === 'Campo'
+                      ? 'DIA DE CAMPO'
+                      : ev.type === 'Agendamento'
+                        ? (ev.statusLabel || 'AGENDAMENTO').toUpperCase()
+                        : ev.label.split(' · ')[0]}
                   </span>
-                  <p className="text-xs font-semibold truncate">
+                  <p className="text-sm font-semibold truncate">
                     {ev.type === 'Agendamento' ? ev.label : ev.project?.client_name || ev.label}
                   </p>
                   {ev.type === 'Agendamento' && ev.project && (
-                    <p className="text-[10px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       Projeto vinculado: {ev.project.client_name}
                       {ev.project.code ? ` (${ev.project.code})` : ''}
                     </p>
                   )}
                   {ev.description && (
-                    <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                       {ev.description}
                     </p>
                   )}
                   {ev.type !== 'Agendamento' && ev.project && (
-                    <p className="text-[10px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {ev.project.code}
                       {ev.project.chef_name ? ` • ${ev.project.chef_name}` : ''}
                       {ev.project.city ? ` • ${ev.project.city}${ev.project.state ? `/${ev.project.state}` : ''}` : ''}
@@ -439,11 +479,11 @@ export default function AgendaPage() {
 
       {/* Aguardando agendamento */}
       <div className="bg-card border rounded-xl p-4">
-        <h2 className="text-sm font-semibold mb-3">
+        <h2 className="text-base font-semibold mb-3">
           Aguardando agendamento ({waiting.length})
         </h2>
         {waiting.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Todos os projetos já têm data de campo.</p>
+          <p className="text-sm text-muted-foreground">Todos os projetos já têm data de campo.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {waiting.map((p) => (
@@ -453,37 +493,72 @@ export default function AgendaPage() {
                 className="flex items-center justify-between gap-2 border rounded-lg p-2.5 hover:bg-muted/30 transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate">{p.client_name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-sm font-semibold truncate">{p.client_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
                     {p.code} • {p.pipeline_status || 'Solicitados'}
                   </p>
                 </div>
-                <span className="text-[10px] text-muted-foreground shrink-0">Abrir →</span>
+                <span className="text-xs text-muted-foreground shrink-0">Abrir →</span>
               </Link>
             ))}
           </div>
         )}
       </div>
 
-      {/* Modal de novo agendamento (abre ao clicar no dia) */}
+      {/* Modal de novo agendamento — igual ao rascunho da terceira foto */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo agendamento</DialogTitle>
+            <DialogTitle className="text-lg font-bold uppercase tracking-wide">
+              Novo Agendamento
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
+            {/* Data */}
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Data</p>
+              <p className="text-sm font-medium text-muted-foreground">Data</p>
               <Input
                 type="date"
                 value={formDate}
                 onChange={(e) => setFormDate(e.target.value)}
+                className="h-10"
               />
             </div>
+
+            {/* Status: Programado / Agendado */}
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Projeto (opcional)</p>
+              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormStatus('Programado')}
+                  className={`flex-1 h-10 rounded-md border text-sm font-semibold transition-colors ${
+                    formStatus === 'Programado'
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  Programado (P)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormStatus('Agendado')}
+                  className={`flex-1 h-10 rounded-md border text-sm font-semibold transition-colors ${
+                    formStatus === 'Agendado'
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  Agendado (A)
+                </button>
+              </div>
+            </div>
+
+            {/* Projeto */}
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Projeto</p>
               <Select value={formProjectId} onValueChange={handleProjectSelect}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="Selecione um projeto" />
                 </SelectTrigger>
                 <SelectContent>
@@ -496,21 +571,85 @@ export default function AgendaPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Título do Evento */}
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Título do evento</p>
+              <p className="text-sm font-medium text-muted-foreground">Título do Evento</p>
               <Input
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
                 placeholder="Ex.: Reunião equipe"
+                className="h-10"
               />
             </div>
+
+            {/* Participantes: Manu, Jonathan, Outro */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Participantes</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWithManu(!withManu)}
+                  className={`h-9 px-4 rounded-md border text-sm font-semibold transition-colors ${
+                    withManu
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  Manu (M)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithJonathan(!withJonathan)}
+                  className={`h-9 px-4 rounded-md border text-sm font-semibold transition-colors ${
+                    withJonathan
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  Jonathan (J)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithOther(!withOther)}
+                  className={`h-9 px-4 rounded-md border text-sm font-semibold transition-colors ${
+                    withOther
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  Outro
+                </button>
+              </div>
+              {withOther && (
+                <Input
+                  value={otherName}
+                  onChange={(e) => setOtherName(e.target.value)}
+                  placeholder="Nome do participante — vira a 1ª letra no evento"
+                  className="h-10"
+                />
+              )}
+            </div>
+
+            {/* Solicitante */}
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Descrição</p>
+              <p className="text-sm font-medium text-muted-foreground">Solicitante</p>
+              <Input
+                value={formSolicitante}
+                onChange={(e) => setFormSolicitante(e.target.value)}
+                placeholder="Nome de quem solicitou"
+                className="h-10"
+              />
+            </div>
+
+            {/* Descrição */}
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Descrição</p>
               <textarea
                 value={formDesc}
                 onChange={(e) => setFormDesc(e.target.value)}
                 placeholder="Adicione uma descrição..."
-                rows={3}
+                rows={4}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
