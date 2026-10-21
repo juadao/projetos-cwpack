@@ -2,29 +2,43 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Project } from '@/lib/types';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 // ===== Acompanhamentos automáticos =====
 const ATC_OFFSETS = [3, 7, 10];  // ATC: D+3, D+7, D+10
 const ATM_OFFSETS = [5, 10, 14]; // ATM: D+5, D+10, D+14
 
-type EventType = 'Campo' | 'ATC' | 'ATM';
+type EventType = 'Campo' | 'ATC' | 'ATM' | 'Agendamento';
 
 interface AgendaEvent {
   id: string;
   type: EventType;
   label: string;
-  project: Project;
+  description?: string | null;
+  project?: Project; // Projeto vinculado (quando houver)
 }
 
-// Cores das barras (mesma linguagem visual das etapas do fluxo)
-const TYPE_STYLE: Record<EventType, { bg: string }> = {
-  Campo: { bg: '#2563eb' },
-  ATC: { bg: '#22c55e' },
-  ATM: { bg: '#f59e0b' },
+interface ManualEventRow {
+  id: string;
+  event_date: string;
+  title: string;
+  description: string | null;
+  project_id: string | null;
+}
+
+// Cores das barras e rótulos do painel
+const TYPE_STYLE: Record<EventType, { bg: string; badge: string }> = {
+  Campo: { bg: '#2563eb', badge: 'DIA DE CAMPO' },
+  ATC: { bg: '#22c55e', badge: 'ATC' },
+  ATM: { bg: '#f59e0b', badge: 'ATM' },
+  Agendamento: { bg: '#8b5cf6', badge: 'AGENDAMENTO' },
 };
 
 const WEEK_DAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -33,7 +47,7 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-// Utilitários de data (sempre no fuso local, formato yyyy-mm-dd)
+// Utilitários de data (fuso local, formato yyyy-mm-dd)
 const fmt = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -50,18 +64,29 @@ const brDate = (iso: string) => {
 };
 
 export default function AgendaPage() {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [manualRows, setManualRows] = useState<ManualEventRow[]>([]);
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => fmt(new Date()));
 
+  // Formulário de novo agendamento
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formDate, setFormDate] = useState('');
+  const [formProjectId, setFormProjectId] = useState('none');
+  const [formTitle, setFormTitle] = useState('');
+  const [formDesc, setFormDesc] = useState('');
+
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('projects')
-      .select('*')
-      .order('start_date', { ascending: true });
-    setProjects((data || []) as Project[]);
+    const [projRes, evRes] = await Promise.all([
+      supabase.from('projects').select('*').order('start_date', { ascending: true }),
+      supabase.from('agenda_events').select('*').order('event_date', { ascending: true }),
+    ]);
+    setProjects((projRes.data || []) as Project[]);
+    setManualRows((evRes.data || []) as ManualEventRow[]);
     setLoading(false);
   }, []);
 
@@ -69,7 +94,7 @@ export default function AgendaPage() {
     loadData();
   }, [loadData]);
 
-  // ===== Monta os eventos: campo + D+ automáticos =====
+  // ===== Monta os eventos: campo + D+ automáticos + agendamentos manuais =====
   const eventsByDate = useMemo(() => {
     const map: Record<string, AgendaEvent[]> = {};
     const push = (date: string, ev: AgendaEvent) => {
@@ -105,14 +130,36 @@ export default function AgendaPage() {
       });
     });
 
+    // Agendamentos manuais criados ao clicar no dia
+    manualRows.forEach((r) => {
+      const date = String(r.event_date).slice(0, 10);
+      if (date.length < 10) return;
+      push(date, {
+        id: r.id,
+        type: 'Agendamento',
+        label: r.title,
+        description: r.description,
+        project: r.project_id ? projects.find((p) => p.id === r.project_id) : undefined,
+      });
+    });
+
     return map;
-  }, [projects]);
+  }, [projects, manualRows]);
 
   // Projetos sem data de campo (tirando os Perdidos)
   const waiting = useMemo(
     () =>
       projects.filter(
         (p) => !p.start_date && (p.pipeline_status || '') !== 'Perdidos'
+      ),
+    [projects]
+  );
+
+  // Projetos em ordem alfabética para o select do formulário
+  const projectsAlpha = useMemo(
+    () =>
+      [...projects].sort((a, b) =>
+        (a.client_name || '').localeCompare(b.client_name || '')
       ),
     [projects]
   );
@@ -144,6 +191,61 @@ export default function AgendaPage() {
     setSelected(fmt(now));
   };
 
+  // ===== Agendamento manual =====
+  const openDialog = (date: string) => {
+    setFormDate(date);
+    setFormProjectId('none');
+    setFormTitle('');
+    setFormDesc('');
+    setDialogOpen(true);
+  };
+
+  // Selecionou um projeto → título vira o nome do cliente (pode editar depois)
+  const handleProjectSelect = (value: string) => {
+    setFormProjectId(value);
+    if (value !== 'none') {
+      const proj = projects.find((p) => p.id === value);
+      if (proj) setFormTitle(proj.client_name || '');
+    }
+  };
+
+  const handleSave = async () => {
+    const title = formTitle.trim();
+    if (!formDate || !title) {
+      toast({ title: 'Preencha a data e o título do evento', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('agenda_events').insert({
+      event_date: formDate,
+      title,
+      description: formDesc.trim() || null,
+      project_id: formProjectId === 'none' ? null : formProjectId,
+    });
+    setSaving(false);
+    if (error) {
+      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Agendamento salvo!' });
+    setDialogOpen(false);
+    setSelected(formDate);
+    // Se a data for de outro mês, move o calendário até ela
+    const [yy, mm] = formDate.slice(0, 10).split('-').map(Number);
+    if (yy && mm) setCursor(new Date(yy, mm - 1, 1));
+    loadData();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from('agenda_events').delete().eq('id', id);
+    if (error) {
+      toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Agendamento excluído' });
+    loadData();
+  };
+
   const selectedEvents = eventsByDate[selected] || [];
 
   if (loading) {
@@ -161,7 +263,7 @@ export default function AgendaPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
           <p className="text-sm text-muted-foreground">
-            Dias de campo e acompanhamentos automáticos • ATC D+3/7/10 • ATM D+5/10/14
+            Clique em um dia para agendar • ATC D+3/7/10 • ATM D+5/10/14
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -194,6 +296,10 @@ export default function AgendaPage() {
           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />
           ATM D+5 / D+10 / D+14
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
+          Agendamentos
+        </span>
       </div>
 
       {/* Calendário mensal */}
@@ -216,14 +322,17 @@ export default function AgendaPage() {
             return (
               <button
                 key={date}
-                onClick={() => setSelected(date)}
+                onClick={() => {
+                  setSelected(date);
+                  openDialog(date);
+                }}
                 className={`relative text-left p-1 sm:p-1.5 min-h-[68px] sm:min-h-[96px] border-b border-r [&:nth-child(7n)]:border-r-0 transition-colors ${
                   !inMonth
                     ? 'bg-muted/20 text-muted-foreground/50'
                     : 'hover:bg-muted/30'
                 } ${isSel ? 'bg-muted/50' : ''}`}
               >
-                {/* Dia atual em destaque laranja (como no print) */}
+                {/* Dia atual em destaque laranja */}
                 <span
                   className={`inline-flex items-center justify-center h-5 w-5 rounded-full text-[10px] font-semibold ${
                     isToday ? 'bg-orange-500 text-white' : ''
@@ -257,9 +366,13 @@ export default function AgendaPage() {
 
       {/* Painel do dia selecionado */}
       <div className="bg-card border rounded-xl p-4">
-        <h2 className="text-sm font-semibold mb-3">
-          Dia {brDate(selected)}
-        </h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-semibold">Dia {brDate(selected)}</h2>
+          <Button size="sm" onClick={() => openDialog(selected)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Agendar neste dia
+          </Button>
+        </div>
         {selectedEvents.length === 0 ? (
           <p className="text-xs text-muted-foreground">Nenhum compromisso neste dia.</p>
         ) : (
@@ -274,20 +387,50 @@ export default function AgendaPage() {
                     className="inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold text-white mb-1"
                     style={{ backgroundColor: TYPE_STYLE[ev.type].bg }}
                   >
-                    {ev.type === 'Campo' ? 'DIA DE CAMPO' : ev.label.split(' · ')[0]}
+                    {TYPE_STYLE[ev.type].badge}
                   </span>
-                  <p className="text-xs font-semibold truncate">{ev.project.client_name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {ev.project.code}
-                    {ev.project.chef_name ? ` • ${ev.project.chef_name}` : ''}
-                    {ev.project.city ? ` • ${ev.project.city}${ev.project.state ? `/${ev.project.state}` : ''}` : ''}
+                  <p className="text-xs font-semibold truncate">
+                    {ev.type === 'Agendamento' ? ev.label : ev.project?.client_name || ev.label}
                   </p>
+                  {ev.type === 'Agendamento' && ev.project && (
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Projeto vinculado: {ev.project.client_name}
+                      {ev.project.code ? ` (${ev.project.code})` : ''}
+                    </p>
+                  )}
+                  {ev.description && (
+                    <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
+                      {ev.description}
+                    </p>
+                  )}
+                  {ev.type !== 'Agendamento' && ev.project && (
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {ev.project.code}
+                      {ev.project.chef_name ? ` • ${ev.project.chef_name}` : ''}
+                      {ev.project.city ? ` • ${ev.project.city}${ev.project.state ? `/${ev.project.state}` : ''}` : ''}
+                    </p>
+                  )}
                 </div>
-                <Link href={`/projetos/${ev.project.id}`} className="shrink-0">
-                  <Button variant="outline" size="sm">
-                    Abrir
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-1 shrink-0">
+                  {ev.type === 'Agendamento' ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(ev.id)}
+                      title="Excluir agendamento"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  ) : (
+                    ev.project && (
+                      <Link href={`/projetos/${ev.project.id}`}>
+                        <Button variant="outline" size="sm">
+                          Abrir
+                        </Button>
+                      </Link>
+                    )
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -321,6 +464,72 @@ export default function AgendaPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de novo agendamento (abre ao clicar no dia) */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo agendamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Data</p>
+              <Input
+                type="date"
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Projeto (opcional)</p>
+              <Select value={formProjectId} onValueChange={handleProjectSelect}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione um projeto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum — agendamento livre</SelectItem>
+                  {projectsAlpha.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.client_name || 'Projeto'}{p.code ? ` (${p.code})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Título do evento</p>
+              <Input
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="Ex.: Reunião equipe"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Descrição</p>
+              <textarea
+                value={formDesc}
+                onChange={(e) => setFormDesc(e.target.value)}
+                placeholder="Adicione uma descrição..."
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
